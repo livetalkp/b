@@ -350,10 +350,11 @@ pub enum Op {
 pub struct OpWithLocation {
     pub opcode: Op,
     pub loc: Loc,
+    pub alive: bool,
 }
 
 pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
-    da_append(&mut (*c).func_body, OpWithLocation {opcode, loc});
+    da_append(&mut (*c).func_body, OpWithLocation {opcode, loc, alive:true});
 }
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
@@ -1223,6 +1224,35 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     Some(())
 }
 
+pub unsafe fn mark_dead_code_after_jmp(func: *mut Func) {
+    /* Remove code after an unconditional Jmp and the following Label. */
+    let mut active_path = true;
+    for op_idx in 0..(*func).body.count {
+        let op = (*func).body.items.add(op_idx);
+        match (*op).opcode {
+            Op::JmpLabel{label: _} => {
+                active_path = false;
+                continue; /* Don't mark jmp as dead. */
+            }
+            Op::Label{label: _} => {
+                active_path = true;
+            }
+            _ => {}
+        }
+        if !active_path {
+            (*op).alive = false;
+        }
+    }
+}
+
+pub unsafe fn optimize_program(c: *mut Compiler) {
+    for i in 0..(*c).funcs.count {
+        let func = (*c).funcs.items.add(i);
+        mark_dead_code_after_jmp(func);
+    }
+
+}
+
 pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, path: *const c_char) -> Option<()> {
     if file_exists(path)? {
         da_append(input_paths, path);
@@ -1409,11 +1439,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None
     }
 
+    optimize_program(&mut c);
+
     let garbage_base = if (*output_path).is_null() {
         get_garbage_base(*input_paths.items, target)?
     } else {
         get_garbage_base(*output_path, target)?
     };
+
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 

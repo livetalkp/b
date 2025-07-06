@@ -101,6 +101,7 @@ pub struct Func {
     pub params_count: usize,
     pub auto_vars_count: usize,
     pub scope_events: Array<ScopeEvent>,
+    pub label_count: usize,
 }
 
 #[derive(Clone, Copy)]

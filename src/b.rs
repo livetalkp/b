@@ -1051,6 +1051,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             scope_events: (*c).func_scope_events,
                             params_count,
                             auto_vars_count: (*c).auto_vars_ator.max,
+                            label_count: (*c).op_label_count,
                         });
                         (*c).func_body = zeroed();
                         (*c).func_goto_labels.count = 0;
@@ -1154,10 +1155,100 @@ pub unsafe fn mark_dead_code_after_jmp(func: *mut Func) {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct LabelInfo {
+    op_idx: usize,
+    jumps: usize,
+    fallthrough: bool,
+    found: bool, /* This is just paranoia. Or assembly? */
+    removed: bool,
+}
+
+/* requires mark_dead_code_after_jmp() call before. */
+pub unsafe fn mark_dead_label_blocks(func: *mut Func) {
+    let mut label_calls: Array<LabelInfo> = zeroed();
+    for _ in 0..(*func).label_count {
+        da_append(&mut label_calls, LabelInfo {
+            op_idx: 0,
+            jumps: 0,
+            fallthrough: false,
+            found: false,
+            removed: false,
+        });
+    }
+
+    /* count label jumps */
+    for op_idx in 0..(*func).body.count {
+        let op = (*func).body.items.add(op_idx);
+        match (*op).opcode {
+            Op::Label{label} => {
+                let lc = label_calls.items.add(label);
+                (*lc).found = true;
+                (*lc).op_idx = op_idx;
+
+                if op_idx > 0 {
+                    let prev_op = *(*func).body.items.add(op_idx - 1);
+                    if prev_op.alive {
+                        match prev_op.opcode {
+                            Op::JmpLabel{label: _} => {}
+                            _ => {
+                                (*lc).fallthrough = true;
+                            }
+                        }
+                    }
+                }
+            }
+            Op::JmpLabel{label} | Op::JmpIfNotLabel{label, arg: _} => {
+                let lc = label_calls.items.add(label);
+                (*lc).jumps += 1;
+            }
+            _ => {}
+        }
+    }
+
+    let mut removed_label_block = false;
+    loop {
+        for lb_idx in 0..(*func).label_count {
+            let label_info = label_calls.items.add(lb_idx);
+            if !(*label_info).removed && (*label_info).jumps == 0 && (*label_info).found {
+                (*label_info).removed = true;
+
+                if !(*label_info).fallthrough {
+                    removed_label_block = true;
+                    (*(*func).body.items.add((*label_info).op_idx)).alive = false;
+                    for op_idx in ((*label_info).op_idx + 1)..(*func).body.count {
+                        let op = (*func).body.items.add(op_idx);
+                        match (*op).opcode {
+                            Op::Label{label} => {
+                                (*label_calls.items.add(label)).fallthrough = false;
+                                break;
+                            },
+                            Op::JmpLabel{label} => {
+                                (*label_calls.items.add(label)).jumps -= 1;
+                            },
+                            Op::JmpIfNotLabel{label, arg: _} => {
+                                (*label_calls.items.add(label)).jumps -= 1;
+                            }
+                            _ => {}
+                        }
+                        (*op).alive = false;
+                    }
+                }
+            }
+        }
+
+        if !removed_label_block {
+            break;
+        }
+        removed_label_block = false;
+    }
+}
+
 pub unsafe fn optimize_program(c: *mut Compiler) {
     for i in 0..(*c).program.funcs.count {
         let func = (*c).program.funcs.items.add(i);
         mark_dead_code_after_jmp(func);
+        mark_dead_label_blocks(func);
     }
 
 }

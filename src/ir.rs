@@ -31,6 +31,7 @@ pub struct OpWithLocation {
     pub opcode: Op,
     pub loc: Loc,
     pub scope_events_count: usize,
+    pub alive: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]

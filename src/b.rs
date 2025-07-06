@@ -301,7 +301,7 @@ impl Binop {
 }
 
 pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
-    da_append(&mut (*c).func_body, OpWithLocation {opcode, loc, scope_events_count: (*c).func_scope_events.count });
+    da_append(&mut (*c).func_body, OpWithLocation {opcode, loc, scope_events_count: (*c).func_scope_events.count, alive: true });
 }
 
 /// Allocator of Auto Vars
@@ -1133,6 +1133,35 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     Some(())
 }
 
+pub unsafe fn mark_dead_code_after_jmp(func: *mut Func) {
+    /* Remove code after an unconditional Jmp and the following Label. */
+    let mut active_path = true;
+    for op_idx in 0..(*func).body.count {
+        let op = (*func).body.items.add(op_idx);
+        match (*op).opcode {
+            Op::JmpLabel{label: _} => {
+                active_path = false;
+                continue; /* Don't mark jmp as dead. */
+            }
+            Op::Label{label: _} => {
+                active_path = true;
+            }
+            _ => {}
+        }
+        if !active_path {
+            (*op).alive = false;
+        }
+    }
+}
+
+pub unsafe fn optimize_program(c: *mut Compiler) {
+    for i in 0..(*c).program.funcs.count {
+        let func = (*c).program.funcs.items.add(i);
+        mark_dead_code_after_jmp(func);
+    }
+
+}
+
 pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, path: *const c_char) -> Option<()> {
     if file_exists(path)? {
         da_append(input_paths, path);
@@ -1363,6 +1392,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         if c.error_count > 0 {
             return None;
         }
+
+
+            optimize_program(&mut c);
 
         log(Log_Level::INFO, c!("compilation took %.3fs"), compilation_start.elapsed().as_secs_f64());
     }

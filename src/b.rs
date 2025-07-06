@@ -1244,11 +1244,35 @@ pub unsafe fn mark_dead_label_blocks(func: *mut Func) {
     }
 }
 
+pub unsafe fn remove_marked_code(func: *mut Func) {
+    let mut first_dead_op = (*func).body.count - 1;
+    for op_idx in 0..(*func).body.count {
+        let op = (*func).body.items.add(op_idx);
+        if !(*op).alive {
+            first_dead_op = op_idx;
+            break;
+        }
+    };
+
+    // TODO: Remove strings from data
+    let mut alive_insert = first_dead_op;
+    for op_idx in first_dead_op..(*func).body.count {
+        let op = (*func).body.items.add(op_idx);
+        if (*op).alive {
+            printf(c!("%d <- %d\n"), alive_insert, op_idx);
+            *(*func).body.items.add(alive_insert) = *(*func).body.items.add(op_idx);
+            alive_insert += 1;
+        }
+    }
+    (*func).body.count = alive_insert;
+}
+
 pub unsafe fn optimize_program(c: *mut Compiler) {
     for i in 0..(*c).program.funcs.count {
         let func = (*c).program.funcs.items.add(i);
         mark_dead_code_after_jmp(func);
         mark_dead_label_blocks(func);
+        remove_marked_code(func);
     }
 
 }

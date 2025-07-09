@@ -1156,91 +1156,92 @@ pub unsafe fn mark_dead_code_after_jmp(func: *mut Func) {
 }
 
 #[derive(Clone, Copy)]
-pub struct LabelInfo {
+pub struct LabelNode {
     op_idx: usize,
-    jumps: usize,
-    fallthrough: bool,
     found: bool, /* This is just paranoia. Or assembly? */
-    removed: bool,
+    distance_from_entrypoint: i32,
+    children: Array<usize>,
 }
 
 /* requires mark_dead_code_after_jmp() call before. */
 pub unsafe fn mark_dead_label_blocks(func: *mut Func) {
-    let mut label_calls: Array<LabelInfo> = zeroed();
+    let mut stack: Array<usize> = zeroed();
+    let mut label_nodes: Array<LabelNode> = zeroed();
     for _ in 0..(*func).label_count {
-        da_append(&mut label_calls, LabelInfo {
+        da_append(&mut label_nodes, LabelNode {
             op_idx: 0,
-            jumps: 0,
-            fallthrough: false,
             found: false,
-            removed: false,
+            distance_from_entrypoint: -1,
+            children: zeroed(),
         });
     }
 
-    /* count label jumps */
+    /* construct tree from jumps and fallthrough of current label */
+    let mut current_label: usize = usize::MAX;
     for op_idx in 0..(*func).body.count {
         let op = (*func).body.items.add(op_idx);
         match (*op).opcode {
             Op::Label{label} => {
-                let lc = label_calls.items.add(label);
+                let lc = label_nodes.items.add(label);
                 (*lc).found = true;
                 (*lc).op_idx = op_idx;
 
+                /* check for fallthrough */
                 if op_idx > 0 {
                     let prev_op = *(*func).body.items.add(op_idx - 1);
                     if prev_op.alive {
                         match prev_op.opcode {
-                            Op::JmpLabel{label: _} => {}
+                            Op::JmpLabel{label: _} => {},
                             _ => {
-                                (*lc).fallthrough = true;
-                            }
+                                if current_label < usize::MAX {
+                                    da_append(&mut (*label_nodes.items.add(current_label)).children, label);
+                                } else {
+                                    da_append(&mut stack, label);
+                                    (*label_nodes.items.add(label)).distance_from_entrypoint = 0;
+                                }
+                            },
                         }
                     }
                 }
+                current_label = label;
             }
             Op::JmpLabel{label} | Op::JmpIfNotLabel{label, arg: _} => {
-                let lc = label_calls.items.add(label);
-                (*lc).jumps += 1;
+                if current_label < usize::MAX {
+                    da_append(&mut (*label_nodes.items.add(current_label)).children, label);
+                } else {
+                    da_append(&mut stack, label);
+                    (*label_nodes.items.add(label)).distance_from_entrypoint = 0;
+                }
             }
             _ => {}
         }
     }
+    while stack.count > 0 {
+        stack.count -= 1;
+        let label = *stack.items.add(stack.count);
+        let label_node = *label_nodes.items.add(label);
+        for c in 0..label_node.children.count {
+            let child = *label_node.children.items.add(c);
+            (*label_nodes.items.add(child)).distance_from_entrypoint = 1 + label_node.distance_from_entrypoint;
+            da_append(&mut stack, child);
+        }
+    }
 
-    let mut removed_label_block = false;
-    loop {
-        for lb_idx in 0..(*func).label_count {
-            let label_info = label_calls.items.add(lb_idx);
-            if !(*label_info).removed && (*label_info).jumps == 0 && (*label_info).found {
-                (*label_info).removed = true;
-
-                if !(*label_info).fallthrough {
-                    removed_label_block = true;
-                    (*(*func).body.items.add((*label_info).op_idx)).alive = false;
-                    for op_idx in ((*label_info).op_idx + 1)..(*func).body.count {
-                        let op = (*func).body.items.add(op_idx);
-                        match (*op).opcode {
-                            Op::Label{label} => {
-                                (*label_calls.items.add(label)).fallthrough = false;
-                                break;
-                            },
-                            Op::JmpLabel{label} => {
-                                (*label_calls.items.add(label)).jumps -= 1;
-                            },
-                            Op::JmpIfNotLabel{label, arg: _} => {
-                                (*label_calls.items.add(label)).jumps -= 1;
-                            }
-                            _ => {}
-                        }
-                        (*op).alive = false;
-                    }
+    for lb_idx in 0..(*func).label_count {
+        let label_node = *label_nodes.items.add(lb_idx);
+        if label_node.distance_from_entrypoint == -1 && label_node.found {
+            (*(*func).body.items.add(label_node.op_idx)).alive = false;
+            for op_idx in (label_node.op_idx + 1)..(*func).body.count {
+                let op = (*func).body.items.add(op_idx);
+                match (*op).opcode {
+                    Op::Label{label: _} => {
+                        break;
+                    },
+                    _ => {}
                 }
+                (*op).alive = false;
             }
         }
-
-        if !removed_label_block {
-            break;
-        }
-        removed_label_block = false;
     }
 }
 
@@ -1259,7 +1260,6 @@ pub unsafe fn remove_marked_code(func: *mut Func) {
     for op_idx in first_dead_op..(*func).body.count {
         let op = (*func).body.items.add(op_idx);
         if (*op).alive {
-            printf(c!("%d <- %d\n"), alive_insert, op_idx);
             *(*func).body.items.add(alive_insert) = *(*func).body.items.add(op_idx);
             alive_insert += 1;
         }

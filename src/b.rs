@@ -1222,8 +1222,11 @@ pub unsafe fn mark_dead_label_blocks(func: *mut Func) {
         let label_node = *label_nodes.items.add(label);
         for c in 0..label_node.children.count {
             let child = *label_node.children.items.add(c);
-            (*label_nodes.items.add(child)).distance_from_entrypoint = 1 + label_node.distance_from_entrypoint;
-            da_append(&mut stack, child);
+            let child_node = label_nodes.items.add(child);
+            if (*child_node).distance_from_entrypoint == -1 {
+                (*child_node).distance_from_entrypoint = 1 + label_node.distance_from_entrypoint;
+                da_append(&mut stack, child);
+            }
         }
     }
 
@@ -1246,6 +1249,10 @@ pub unsafe fn mark_dead_label_blocks(func: *mut Func) {
 }
 
 pub unsafe fn remove_marked_code(func: *mut Func) {
+    if (*func).body.count == 0 {
+        return;
+    }
+
     let mut first_dead_op = (*func).body.count - 1;
     for op_idx in 0..(*func).body.count {
         let op = (*func).body.items.add(op_idx);

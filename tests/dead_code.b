@@ -63,6 +63,9 @@ URMOM:
 
     goto END;
     y = 0;
+    auto e;
 END:
     printf("%d\n", x + y);
+    /* TODO: in this case, variable e may not be removed... */
+    printf("%d\n", &e - &x);
 }

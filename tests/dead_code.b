@@ -7,6 +7,13 @@ unused_func(){
 ANOTHER_LABEL:
 }
 
+empty_func() {
+}
+
+asm_func() {
+    __asm__("");
+}
+
 isolated_loop() {
     goto RETURN;
 
@@ -44,6 +51,8 @@ main() {
 
     isolated_loop();
     constant_folded_if_else();
+    empty_func();
+    asm_func();
 
 URMOM:
     if (1 < 2) {

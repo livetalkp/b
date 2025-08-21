@@ -61,10 +61,10 @@ test: $(BUILD)/b $(BUILD)/btest $(BUILD)/libb/
 .PHONY: mingw32-all
 mingw32-all: $(BUILD)/b.exe $(BUILD)/btest.exe $(BUILD)/libb/
 
-$(BUILD)/b: $(RSS) $(POSIX_OBJS) $(SRC)/codegen/.INDEX.rs | $(BUILD)
+$(BUILD)/b: $(RSS) $(POSIX_OBJS) $(SRC)/codegen/.INDEX.rs $(SRC)/codegen/**/* | $(BUILD)
 	rustc $(CRUST_FLAGS) -L $(BUILD) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/b.rs -o $(BUILD)/b
 
-$(BUILD)/btest: $(SRC)/btest.rs $(RSS) $(POSIX_OBJS) $(SRC)/codegen/.INDEX.rs | $(BUILD)
+$(BUILD)/btest: $(SRC)/btest.rs $(RSS) $(POSIX_OBJS) $(SRC)/codegen/.INDEX.rs $(SRC)/codegen/**/* | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/btest.rs -o $(BUILD)/btest
 
 ifneq ($(OS),Windows_NT)

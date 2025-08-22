@@ -21,7 +21,7 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -t *linux* -t *windows*
+          ./build/btest -t *linux* -t *windows*
   ubuntu-uxn:
     runs-on: ubuntu-latest
     steps:
@@ -33,15 +33,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -qq -y clang make
-          git clone https://git.sr.ht/~rabbits/uxn11
-          cd uxn11
-          make cli
+          git clone https://git.sr.ht/~rabbits/uxn
+          cd uxn
+          git checkout b56cb3501b741410188b00ffcac9010cfbe1783c
+          clang -std=c89 -Wall -Wno-unknown-pragmas src/uxn.c src/devices/system.c src/devices/console.c src/devices/file.c src/devices/datetime.c src/uxncli.c -o uxncli
       - name: Build Toolchain
         run: |
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -t uxn
+          PATH=$(realpath uxn/):$PATH ./build/btest -t uxn
   ubuntu-6502-posix:
     runs-on: ubuntu-latest
     steps:

@@ -28,11 +28,12 @@ test2() {
 
 test3() {
 	extrn printf, malloc;
-	auto xs;
+	auto W, xs;
 
-	xs = malloc(8*2);
-	xs[0*8] = 13;
-	xs[1*8] = 42;
+	W = &0[1];
+	xs = malloc(W*2);
+	xs[0] = 13;
+	*(xs+W) = 42;
 
 	// "E1[E2] is identical to *(E1+E2)"
 	// "&*x is identically x"
@@ -40,8 +41,8 @@ test3() {
 	// check generated IR to confirm that
 	printf(
 		"xs: [%d, %d]\n",
-		read(xs + 0*8),
-		read(&xs[1*8])
+		read(xs),
+		read(&xs[1])
 	);
 }
 

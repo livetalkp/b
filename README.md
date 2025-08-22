@@ -60,6 +60,7 @@ Copy the `build/posix6502` executable somewhere were the `$PATH` points at.
 - [SH4AL-DSP (Casio Prizm/fx-CG50)](https://github.com/seija-amanojaku/sh4dsp_prizm)
 - [Basm target for bext-lang/b](https://github.com/marcosantos98/bext-lang-basm-target)
 - [Custom Bext Bytecode](https://gitlab.com/nullnominal/bext-bytecode/)
+- [MSVC Bext Codegen](https://github.com/mikmart/bext_msvc_x86_64_windows)
 
 *Submit a PR to add yours to the list above here*
 
